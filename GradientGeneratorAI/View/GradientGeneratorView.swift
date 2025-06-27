@@ -8,20 +8,37 @@
 import SwiftUI
 import FoundationModels
 
-struct GradientGenerator: View {
+struct GradientGeneratorView: View {
     @State private var isGenerating: Bool = false
     @State private var generationLimit: Int = 3
+    var onTap: (Palette) -> ()
+    
     @State private var userPrompt: String = ""
-
+    
     @State private var isStopped: Bool = false
     @State private var palettes: [Palette] = []
+    @State private var errorMessage: String?
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
             Text("Gradient Generator")
                 .font(.largeTitle.bold())
-
+            
             ScrollView(palettes.isEmpty ? .vertical : .horizontal) {
                 HStack(spacing: 12) {
+                    ForEach(palettes) { palette in
+                        VStack(spacing: 6) {
+                            Text(palette.name)
+                                .font(.caption)
+                                .foregroundStyle(.gray)
+                        }
+                        .frame(maxHeight: .infinity)
+                        .contentShape(.rect)
+                        .onTapGesture {
+                            onTap(palette)
+                        }
+                    }
+                    
                     if isGenerating || palettes.isEmpty {
                         VStack(spacing: 6) {
                             KeyframeAnimator(initialValue: 0.0, repeating: true) { rotation in
@@ -32,8 +49,8 @@ struct GradientGenerator: View {
                                 LinearKeyframe(0, duration: 0)
                                 LinearKeyframe(360, duration: 5)
                             }
-
-
+                            
+                            
                             if palettes.isEmpty {
                                 Text("Start crafting your gradient....")
                                     .font(.caption)
@@ -46,20 +63,25 @@ struct GradientGenerator: View {
                 .padding(15)
             }
             .frame(height: 100)
-
+            .disabled(isGenerating)
+            
             TextField("Gradient Prompt", text: $userPrompt)
                 .padding(.horizontal, 15)
                 .padding(.vertical, 12)
                 .glassEffect()
-
+                .disableWithOpacity(isGenerating)
+            
             Stepper("Generation Limit: **\(generationLimit)**", value: $generationLimit, in: 1...10)
                 .padding(.horizontal, 15)
                 .padding(.vertical, 10)
                 .glassEffect()
+                .disableWithOpacity(isGenerating)
+            
             Button {
                 if isGenerating {
                     isStopped = true
                 } else {
+                    isStopped = false
                     generatePalettes()
                 }
             } label: {
@@ -71,38 +93,64 @@ struct GradientGenerator: View {
                     .padding(.vertical, 10)
                     .background(.blue.gradient, in: .capsule)
             }
-
+            .disableWithOpacity(userPrompt.isEmpty)
+            
         }
         .safeAreaPadding(15)
         .glassEffect(.regular, in: .rect(cornerRadius: 20, style: .continuous))
+        .alert(isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Alert(title: Text("Error"), message: Text(errorMessage ?? "Unknown error"), dismissButton: .default(Text("OK")))
+        }
     }
-
+    
     private func generatePalettes() {
         Task {
             do {
+                isGenerating = true
                 let instructions: String = """
                     Generate a smooth gradient color palette based on the user's prompt. The gradient should transition between two or more colors relevant to the theme, mood, or elements described in the prompt. Limit the result to only 5 palettes.
                     """
-
+                
                 let session = LanguageModelSession {
                     instructions
                 }
-
+                
                 let response = session.streamResponse(to: userPrompt, generating: [Palette].self)
-                ///TO-DO: START HERE
-            } catch {
-                print(error.localizedDescription)
+                
+                for try await partialResult in response {
+                    let palettes = partialResult.compactMap {
+                        if let id = $0.id,
+                           let name = $0.name,
+                           let colors = $0.colors?.compactMap({ $0 }),
+                           colors.count > 2 {
+                            return Palette(id: id, name: name, colors: colors)
+                        }
+                        return nil
+                    }
+                    withAnimation(.snappy(duration: 0.3, extraBounce: 0)) {
+                        self.palettes = palettes
+                    }
+                    
+                    if isStopped {
+                        print("User-Stopped")
+                        isGenerating = false
+                        return
+                    }
+                }
+                
                 isGenerating = false
-                isStopped = false
+            } catch {
+                errorMessage = "(\(type(of: error))): \(error.localizedDescription)\n\(String(describing: error))"
+                isGenerating = false
             }
         }
     }
 }
 
-#Preview {
-    GradientGenerator()
-        .padding()
-}
+//#Preview {
+//    GradientGeneratorView()
+//        .padding()
+//}
 
 @Generable
 struct Palette: Identifiable {
@@ -113,3 +161,8 @@ struct Palette: Identifiable {
     var colors: [String]
 }
 
+extension View {
+    func disableWithOpacity(_ status: Bool) -> some View {
+        self.disabled(status).opacity(status ? 0.5 : 1)
+    }
+}
