@@ -11,7 +11,8 @@ struct WallpaperView: View {
     @State private var palettes: [Palette] = []
     @State private var selectedPaletteIndex: Int? = nil
     @State private var isHelloDarkMode: Bool = true
-
+    
+    /// The set of colors to use for the background gradient, based on the selected palette.
     private var gradientColors: [Color] {
         if palettes.isEmpty || selectedPaletteIndex == nil || selectedPaletteIndex! < 0 || selectedPaletteIndex! >= palettes.count {
             return [Color.black]
@@ -19,7 +20,7 @@ struct WallpaperView: View {
             return palettes[selectedPaletteIndex!].swiftUIColors
         }
     }
-
+    
     var body: some View {
         ZStack {
             LinearGradient(colors: self.gradientColors, startPoint: .top, endPoint: .bottom)

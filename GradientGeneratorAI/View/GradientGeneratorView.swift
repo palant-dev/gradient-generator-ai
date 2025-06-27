@@ -12,9 +12,7 @@ struct GradientGeneratorView: View {
     @State private var isGenerating: Bool = false
     @State private var generationLimit: Int = 3
     var onTap: (Palette) -> ()
-    
     @State private var userPrompt: String = ""
-    
     @State private var isStopped: Bool = false
     @Binding var palettes: [Palette]
     @Binding var selectedColor: Int?
@@ -23,8 +21,6 @@ struct GradientGeneratorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
-//            Text("Let me create a background for you")
-//                .font(.largeTitle.bold())
             
             ScrollView(palettes.isEmpty ? .vertical : .horizontal) {
                 HStack(spacing: 12) {
@@ -136,14 +132,17 @@ struct GradientGeneratorView: View {
         }
     }
     
+    /// Asynchronously generates gradient palettes based on the user's input prompt.
+    /// Updates the `palettes` array with new results and handles errors and cancellation.
     private func generatePalettes() {
         Task {
             do {
                 isGenerating = true
+
                 let instructions: String = """
                     Generate a smooth gradient color palette based on the user's prompt. The gradient should transition between two or more colors relevant to the theme, mood, or elements described in the prompt. Limit the result to only \(generationLimit) palettes.
                     """
-                
+
                 let session = LanguageModelSession {
                     instructions
                 }
@@ -180,39 +179,37 @@ struct GradientGeneratorView: View {
     }
 }
 
-//#Preview {
-//    GradientGeneratorView()
-//        .padding()
-//}
-
-@Generable
-struct Palette: Identifiable {
-    var id: Int
-    @Guide(description: "Gradient Name")
-    var name: String
-    @Guide(description: "Hex Color Codes")
-    var colors: [String]
-
+extension Palette {
     var swiftUIColors: [Color] {
-        colors.compactMap({ .init(hex: $0) })
+        colors.compactMap { Color(hex: $0) }
     }
 }
 
 extension View {
+
+    /// Disables the view and reduces its opacity when the given condition is true.
+    /// - Parameter status: A Boolean value that determines whether the view is disabled and faded. If true, the view is disabled and its opacity is reduced to 0.5.
+    /// - Returns: A modified view that is disabled and semi-transparent when `status` is true, or fully opaque and enabled when false.
     func disableWithOpacity(_ status: Bool) -> some View {
         self.disabled(status).opacity(status ? 0.5 : 1)
     }
 }
 
 extension Color {
+
+    /// Initializes a `Color` instance from a hexadecimal color string.
+    /// - Parameter hex: A hex string representing a color (e.g., "#FFAA00" or "FFAA00").
     init(hex: String) {
         let hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
 
         var rgb: UInt64 = 0
         Scanner(string: hexSanitized).scanHexInt64(&rgb)
 
+        /// Extracts the red component by masking the upper 8 bits and shifting right by 16, then normalizing to [0, 1].
         let red = Double((rgb & 0xFF0000) >> 16) / 255.0
+        /// Extracts the green component by masking the middle 8 bits and shifting right by 8, then normalizing to [0, 1].
         let green = Double((rgb & 0x00FF00) >> 8) / 255.0
+        /// Extracts the blue component by masking the lower 8 bits and normalizing to [0, 1].
         let blue = Double(rgb & 0x0000FF) / 255.0
 
         self.init(red: red, green: green, blue: blue)
