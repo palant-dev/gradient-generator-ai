@@ -16,25 +16,47 @@ struct GradientGeneratorView: View {
     @State private var userPrompt: String = ""
     
     @State private var isStopped: Bool = false
-    @State private var palettes: [Palette] = []
+    @Binding var palettes: [Palette]
+    @Binding var selectedColor: Int?
     @State private var errorMessage: String?
-    
+    @Binding var isHelloDarkMode: Bool
+
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
-            Text("Gradient Generator")
-                .font(.largeTitle.bold())
+//            Text("Let me create a background for you")
+//                .font(.largeTitle.bold())
             
             ScrollView(palettes.isEmpty ? .vertical : .horizontal) {
                 HStack(spacing: 12) {
-                    ForEach(palettes) { palette in
+                    ForEach(Array(palettes.enumerated()), id: \.1.id) { index, palette in
+
                         VStack(spacing: 6) {
+                            LinearGradient(colors: palette.swiftUIColors, startPoint: .top, endPoint: .bottom)
+                                .clipShape(.circle)
+                                .overlay(alignment: .center) {
+                                    if selectedColor == index {
+                                        ZStack {
+                                            Color.black.opacity(0.3)
+                                                .clipShape(.circle)
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .resizable()
+                                                .frame(width: 28, height: 28)
+                                                .foregroundColor(.white)
+                                                .shadow(radius: 2)
+                                        }
+                                    }
+                                }
+
                             Text(palette.name)
                                 .font(.caption)
                                 .foregroundStyle(.gray)
+
                         }
                         .frame(maxHeight: .infinity)
                         .contentShape(.rect)
                         .onTapGesture {
+                            print(palette)
+                            selectedColor = index
                             onTap(palette)
                         }
                     }
@@ -63,6 +85,7 @@ struct GradientGeneratorView: View {
                 .padding(15)
             }
             .frame(height: 100)
+            .defaultScrollAnchor(.trailing, for: .sizeChanges)
             .disabled(isGenerating)
             
             TextField("Gradient Prompt", text: $userPrompt)
@@ -70,13 +93,23 @@ struct GradientGeneratorView: View {
                 .padding(.vertical, 12)
                 .glassEffect()
                 .disableWithOpacity(isGenerating)
-            
-            Stepper("Generation Limit: **\(generationLimit)**", value: $generationLimit, in: 1...10)
-                .padding(.horizontal, 15)
-                .padding(.vertical, 10)
-                .glassEffect()
-                .disableWithOpacity(isGenerating)
-            
+
+            HStack {
+                Stepper("Generation Limit: **\(generationLimit)**", value: $generationLimit, in: 1...10)
+                    .padding(.horizontal, 15)
+                    .padding(.vertical, 10)
+                    .glassEffect()
+                    .disableWithOpacity(isGenerating)
+                    .padding(.trailing, 12)
+
+                Toggle("Hello Light Mode", isOn: $isHelloDarkMode)
+                    .padding(.horizontal, 15)
+                    .padding(.vertical, 10)
+                    .glassEffect()
+                    .disableWithOpacity(isGenerating)
+            }
+
+
             Button {
                 if isGenerating {
                     isStopped = true
@@ -108,7 +141,7 @@ struct GradientGeneratorView: View {
             do {
                 isGenerating = true
                 let instructions: String = """
-                    Generate a smooth gradient color palette based on the user's prompt. The gradient should transition between two or more colors relevant to the theme, mood, or elements described in the prompt. Limit the result to only 5 palettes.
+                    Generate a smooth gradient color palette based on the user's prompt. The gradient should transition between two or more colors relevant to the theme, mood, or elements described in the prompt. Limit the result to only \(generationLimit) palettes.
                     """
                 
                 let session = LanguageModelSession {
@@ -159,6 +192,10 @@ struct Palette: Identifiable {
     var name: String
     @Guide(description: "Hex Color Codes")
     var colors: [String]
+
+    var swiftUIColors: [Color] {
+        colors.compactMap({ .init(hex: $0) })
+    }
 }
 
 extension View {
@@ -166,3 +203,19 @@ extension View {
         self.disabled(status).opacity(status ? 0.5 : 1)
     }
 }
+
+extension Color {
+    init(hex: String) {
+        let hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
+
+        var rgb: UInt64 = 0
+        Scanner(string: hexSanitized).scanHexInt64(&rgb)
+
+        let red = Double((rgb & 0xFF0000) >> 16) / 255.0
+        let green = Double((rgb & 0x00FF00) >> 8) / 255.0
+        let blue = Double(rgb & 0x0000FF) / 255.0
+
+        self.init(red: red, green: green, blue: blue)
+    }
+}
+
