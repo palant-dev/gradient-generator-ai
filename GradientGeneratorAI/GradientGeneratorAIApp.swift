@@ -13,5 +13,7 @@ struct GradientGeneratorAIApp: App {
         WindowGroup {
             ContentView()
         }
+        .defaultSize(width: 800, height: 600)
+        .windowResizability(.contentSize)
     }
 }
