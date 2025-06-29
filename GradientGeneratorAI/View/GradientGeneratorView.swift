@@ -9,28 +9,23 @@ import SwiftUI
 import FoundationModels
 
 struct GradientGeneratorView: View {
-    @State private var isGenerating: Bool = false
-    @State private var generationLimit: Int = 3
+    @Bindable var viewModel: GradientGeneratorViewModel
+
     var onTap: (Palette) -> ()
-    @State private var userPrompt: String = ""
-    @State private var isStopped: Bool = false
-    @Binding var palettes: [Palette]
-    @Binding var selectedColor: Int?
-    @State private var errorMessage: String?
-    @Binding var isHelloDarkMode: Bool
+
 
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
             
-            ScrollView(palettes.isEmpty ? .vertical : .horizontal) {
+            ScrollView(viewModel.palettes.isEmpty ? .vertical : .horizontal) {
                 HStack(spacing: 12) {
-                    ForEach(Array(palettes.enumerated()), id: \.1.id) { index, palette in
+                    ForEach(Array(viewModel.palettes.enumerated()), id: \.1.id) { index, palette in
 
                         VStack(spacing: 6) {
                             LinearGradient(colors: palette.swiftUIColors, startPoint: .top, endPoint: .bottom)
                                 .clipShape(.circle)
                                 .overlay(alignment: .center) {
-                                    if selectedColor == index {
+                                    if viewModel.selectedColor == index {
                                         ZStack {
                                             Color.black.opacity(0.3)
                                                 .clipShape(.circle)
@@ -52,12 +47,12 @@ struct GradientGeneratorView: View {
                         .contentShape(.rect)
                         .onTapGesture {
                             print(palette)
-                            selectedColor = index
+                            viewModel.selectedColor = index
                             onTap(palette)
                         }
                     }
                     
-                    if isGenerating || palettes.isEmpty {
+                    if viewModel.isGenerating || viewModel.palettes.isEmpty {
                         VStack(spacing: 6) {
                             KeyframeAnimator(initialValue: 0.0, repeating: true) { rotation in
                                 Image(systemName: "apple.intelligence")
@@ -69,7 +64,7 @@ struct GradientGeneratorView: View {
                             }
                             
                             
-                            if palettes.isEmpty {
+                            if viewModel.palettes.isEmpty {
                                 Text("Start crafting your gradient....")
                                     .font(.caption)
                                     .foregroundStyle(.gray)
@@ -82,39 +77,39 @@ struct GradientGeneratorView: View {
             }
             .frame(height: 100)
             .defaultScrollAnchor(.trailing, for: .sizeChanges)
-            .disabled(isGenerating)
+            .disabled(viewModel.isGenerating)
             
-            TextField("Gradient Prompt", text: $userPrompt)
+            TextField("Gradient Prompt", text: $viewModel.userPrompt)
                 .padding(.horizontal, 15)
                 .padding(.vertical, 12)
                 .glassEffect()
-                .disableWithOpacity(isGenerating)
+                .disableWithOpacity(viewModel.isGenerating)
 
             HStack {
-                Stepper("Generation Limit: **\(generationLimit)**", value: $generationLimit, in: 1...10)
+                Stepper("Generation Limit: **\(viewModel.generationLimit)**", value: $viewModel.generationLimit, in: 1...10)
                     .padding(.horizontal, 15)
                     .padding(.vertical, 10)
                     .glassEffect()
-                    .disableWithOpacity(isGenerating)
+                    .disableWithOpacity(viewModel.isGenerating)
                     .padding(.trailing, 12)
 
-                Toggle("Hello Light Mode", isOn: $isHelloDarkMode)
+                Toggle("Hello Light Mode", isOn: $viewModel.isHelloDarkMode)
                     .padding(.horizontal, 15)
                     .padding(.vertical, 10)
                     .glassEffect()
-                    .disableWithOpacity(isGenerating)
+                    .disableWithOpacity(viewModel.isGenerating)
             }
 
 
             Button {
-                if isGenerating {
-                    isStopped = true
+                if viewModel.isGenerating {
+                    viewModel.isStopped = true
                 } else {
-                    isStopped = false
-                    generatePalettes()
+                    viewModel.isStopped = false
+                    viewModel.generatePalettes()
                 }
             } label: {
-                Text(isGenerating ? "Stop Crafting" : "Craft Gradients")
+                Text(viewModel.isGenerating ? "Stop Crafting" : "Craft Gradients")
                     .contentTransition(.numericText())
                     .foregroundStyle(.white)
                     .fontWeight(.semibold)
@@ -122,61 +117,16 @@ struct GradientGeneratorView: View {
                     .padding(.vertical, 10)
                     .background(.blue.gradient, in: .capsule)
             }
-            .disableWithOpacity(userPrompt.isEmpty)
+            .disableWithOpacity(viewModel.userPrompt.isEmpty)
             
         }
         .safeAreaPadding(15)
         .glassEffect(.regular, in: .rect(cornerRadius: 20, style: .continuous))
-        .alert(isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-            Alert(title: Text("Error"), message: Text(errorMessage ?? "Unknown error"), dismissButton: .default(Text("OK")))
+        .alert(isPresented: Binding(get: { viewModel.errorMessage != nil }, set: { if !$0 { viewModel.errorMessage = nil } })) {
+            Alert(title: Text("Error"), message: Text(viewModel.errorMessage ?? "Unknown error"), dismissButton: .default(Text("OK")))
         }
     }
     
-    /// Asynchronously generates gradient palettes based on the user's input prompt.
-    /// Updates the `palettes` array with new results and handles errors and cancellation.
-    private func generatePalettes() {
-        Task {
-            do {
-                isGenerating = true
-
-                let instructions: String = """
-                    Generate a smooth gradient color palette based on the user's prompt. The gradient should transition between two or more colors relevant to the theme, mood, or elements described in the prompt. Limit the result to only \(generationLimit) palettes.
-                    """
-
-                let session = LanguageModelSession {
-                    instructions
-                }
-                
-                let response = session.streamResponse(to: userPrompt, generating: [Palette].self)
-                
-                for try await partialResult in response {
-                    let palettes = partialResult.compactMap {
-                        if let id = $0.id,
-                           let name = $0.name,
-                           let colors = $0.colors?.compactMap({ $0 }),
-                           colors.count > 2 {
-                            return Palette(id: id, name: name, colors: colors)
-                        }
-                        return nil
-                    }
-                    withAnimation(.snappy(duration: 0.3, extraBounce: 0)) {
-                        self.palettes = palettes
-                    }
-                    
-                    if isStopped {
-                        print("User-Stopped")
-                        isGenerating = false
-                        return
-                    }
-                }
-                
-                isGenerating = false
-            } catch {
-                errorMessage = "(\(type(of: error))): \(error.localizedDescription)\n\(String(describing: error))"
-                isGenerating = false
-            }
-        }
-    }
 }
 
 extension Palette {
@@ -215,4 +165,3 @@ extension Color {
         self.init(red: red, green: green, blue: blue)
     }
 }
-

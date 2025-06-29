@@ -8,27 +8,29 @@
 import SwiftUI
 
 struct WallpaperView: View {
-    @State private var palettes: [Palette] = []
-    @State private var selectedPaletteIndex: Int? = nil
-    @State private var isHelloDarkMode: Bool = true
+    @State private var generatorViewModel = GradientGeneratorViewModel()
     
     /// The set of colors to use for the background gradient, based on the selected palette.
     private var gradientColors: [Color] {
-        if palettes.isEmpty || selectedPaletteIndex == nil || selectedPaletteIndex! < 0 || selectedPaletteIndex! >= palettes.count {
+        guard
+            !generatorViewModel.palettes.isEmpty,
+            let selected = generatorViewModel.selectedColor,
+            selected >= 0,
+            selected < generatorViewModel.palettes.count
+        else {
             return [Color.black]
-        } else {
-            return palettes[selectedPaletteIndex!].swiftUIColors
         }
+        return generatorViewModel.palettes[selected].swiftUIColors
     }
-    
+
     var body: some View {
         ZStack {
             LinearGradient(colors: self.gradientColors, startPoint: .top, endPoint: .bottom)
             Image("hello")
-                .foregroundStyle(isHelloDarkMode ? Color.white : Color.black)
+                .foregroundStyle(generatorViewModel.isHelloDarkMode ? Color.white : Color.black)
             VStack {
                 Spacer()
-                GradientGeneratorView(onTap: { _ in }, palettes: $palettes, selectedColor: $selectedPaletteIndex, isHelloDarkMode: $isHelloDarkMode)
+                GradientGeneratorView(viewModel: generatorViewModel, onTap: { _ in })
                     .frame(maxWidth: 800)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 20)
